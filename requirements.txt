@@ -1,5 +1,5 @@
 flask
 flask-cors
-numpy
-eventlet
 flask-socketio
+eventlet
+python-socketio
