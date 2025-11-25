@@ -735,44 +735,36 @@ def on_create_game(data):
 
     socketio.emit('open_games_list', {"games": open_games})
 
-@socketio.on('join_game')
-def on_join_game(data):
-    sid = request.sid
-    game_id = str(data.get('game_id', '')).strip()
-    
-    game = online_manager.join_game(game_id, sid)
-    
-    if game:
-        join_room(game_id)
-        
-        # Send join success to the joining player
-        emit('game_joined', {
-            'game_id': game_id,
-            'board': game["board"],
-            'board_size': game["size"],
-            'player_color': 2 # White
-        }, room=sid)
-        
-        # Broadcast game start to both players
-        game_state = {
-            'game_id': game_id,
-            'board': game["board"],
-            'turn': game["turn"],
-            'status': game["status"],
-            'message': f"Game {game_id} started!"
-        }
-        socketio.emit('game_state_update', game_state, room=game_id)
-    else:
-        emit('join_failed', {'message': f"Game {game_id} not found or full."}, room=sid)
-        return
-
 @socketio.on('get_open_games')
 def on_get_open_games():
     open_games = [
         {"id": g["id"], "size": g["size"], "host_sid": g["players"][1]}
         for g in online_manager.games.values() if g["status"] == "waiting"
     ]
+    print(f"📤 Sending {len(open_games)} open games to {request.sid}")
+    print(f"   Games: {[g['id'] for g in open_games]}")
     emit('open_games_list', {"games": open_games}, room=request.sid)
+
+@socketio.on('join_game')
+def on_join_game(data):
+    sid = request.sid
+    game_id = str(data.get('game_id', '')).strip()
+    
+    print(f"🎮 Join request from {sid} for game '{game_id}'")
+    print(f"   Available games: {list(online_manager.games.keys())}")
+    
+    game = online_manager.join_game(game_id, sid)
+    
+    if game:
+        print(f"✅ Player {sid} joined game {game_id}")
+        join_room(game_id)
+        # ... rest of code
+    else:
+        available = list(online_manager.games.keys())
+        print(f"❌ Game {game_id} not found. Available: {available}")
+        emit('join_failed', {
+            'message': f"Game '{game_id}' not found or full. Available games: {', '.join(available) if available else 'None'}"
+        }, room=sid)
 
 
 @socketio.on('make_online_move')
@@ -852,5 +844,4 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
-
 
