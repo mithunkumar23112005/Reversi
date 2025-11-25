@@ -713,14 +713,28 @@ def handle_disconnect():
 def on_create_game(data):
     sid = request.sid
     board_size = data.get('board_size', 8)
+
+    # Create new game
     new_game = online_manager.create_game(sid, board_size)
-    
+
+    # Put host in the room
     join_room(new_game["id"])
+
+    # Send game creation confirmation to host ONLY
     emit('game_created', {
         'game_id': new_game["id"],
         'board_size': new_game["size"],
-        'player_color': 1 # Black
+        'player_color': 1  # Black
     }, room=sid)
+
+    # 🔥 IMPORTANT FIX: Broadcast updated open games list to ALL clients
+    open_games = [
+        {"id": g["id"], "size": g["size"], "host_sid": g["players"][1]}
+        for g in online_manager.games.values()
+        if g["status"] == "waiting"
+    ]
+
+    socketio.emit('open_games_list', {"games": open_games})
 
 @socketio.on('join_game')
 def on_join_game(data):
@@ -751,6 +765,7 @@ def on_join_game(data):
         socketio.emit('game_state_update', game_state, room=game_id)
     else:
         emit('join_failed', {'message': f"Game {game_id} not found or full."}, room=sid)
+        return
 
 @socketio.on('get_open_games')
 def on_get_open_games():
@@ -791,10 +806,13 @@ def on_make_online_move(data):
     if success:
         # Check for game end and determine winner/score
         if game["status"] == "finished":
+            flat = [cell for row in game["board"] for cell in row]
             scores = {
-                1: game["board"].flat().count(1),
-                2: game["board"].flat().count(2)
+                1: flat.count(1),
+                2: flat.count(2)
             }
+
+
             winner = 0
             if scores[1] > scores[2]:
                 winner = 1
@@ -808,7 +826,7 @@ def on_make_online_move(data):
                 'status': game["status"],
                 'scores': scores,
                 'winner': winner,
-                'message': message
+                'message': message or "Game Over"
             }
             socketio.emit('game_state_update', game_state, room=game_id)
             online_manager.remove_game(game_id)
@@ -835,3 +853,4 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
