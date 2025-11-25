@@ -6,6 +6,10 @@ import time
 from collections import defaultdict
 import uuid
 
+
+import eventlet
+eventlet.monkey_patch()
+
 # --- Flask & SocketIO Setup ---
 app = Flask(__name__)
 # Allow CORS for development, especially for SocketIO
@@ -829,4 +833,5 @@ def on_make_online_move(data):
 # ============================================================
 if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+
+    socketio.run(app, host="0.0.0.0", port=5000)
