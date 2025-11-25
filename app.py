@@ -1,6 +1,5 @@
 import eventlet
 eventlet.monkey_patch()
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -8,6 +7,7 @@ import numpy as np
 import time
 from collections import defaultdict
 import uuid
+
 
 
 
@@ -42,11 +42,27 @@ class GameManager:
         self.engines[game_id] = ReversiEngine(board_size)
         return self.games[game_id]
 
+    # In GameManager class in app.py
+
     def join_game(self, game_id, joiner_sid):
         game = self.games.get(game_id)
-        if not game or game["status"] != "waiting":
+        
+        # Check if game exists
+        if not game:
+            return None
+
+        # IDEMPOTENCY FIX: If this user is ALREADY player 2, return success immediately
+        if game["players"][2] == joiner_sid:
+            return game
+
+        # Standard check: must be waiting
+        if game["status"] != "waiting":
             return None
         
+        # Prevent host from joining their own game as player 2
+        if game["players"][1] == joiner_sid:
+            return None
+
         # Player 2 is White
         game["players"][2] = joiner_sid
         game["status"] = "playing"
@@ -746,27 +762,66 @@ def on_get_open_games():
     print(f"   Games: {[g['id'] for g in open_games]}")
     emit('open_games_list', {"games": open_games}, room=request.sid)
 
+# In app.py
+
 @socketio.on('join_game')
 def on_join_game(data):
     sid = request.sid
     game_id = str(data.get('game_id', '')).strip()
     
     print(f"🎮 Join request from {sid} for game '{game_id}'")
-    print(f"   Available games: {list(online_manager.games.keys())}")
     
     game = online_manager.join_game(game_id, sid)
     
     if game:
         print(f"✅ Player {sid} joined game {game_id}")
+        
+        # 1. Join the SocketIO room
         join_room(game_id)
-        # ... rest of code
-    else:
-        available = list(online_manager.games.keys())
-        print(f"❌ Game {game_id} not found. Available: {available}")
-        emit('join_failed', {
-            'message': f"Game '{game_id}' not found or full. Available games: {', '.join(available) if available else 'None'}"
-        }, room=sid)
+        
+        # 2. Prepare payload
+        payload = {
+            'game_id': game["id"],
+            'board_size': game["size"],
+            'board': game["board"],
+            'scores': {1: 2, 2: 2} # Initial scores
+        }
 
+        # 3. Notify the JOINER (Player 2 - White)
+        # This triggers the frontend to switch screens
+        payload['player_color'] = 2
+        emit('game_joined', payload, room=sid)
+
+        # 4. Notify the HOST (Player 1 - Black)
+        # This triggers the host to stop seeing "Waiting for opponent..."
+        payload['player_color'] = 1
+        host_sid = game["players"][1]
+        emit('game_joined', payload, room=host_sid)
+
+        # 5. Broadcast to room that game is starting (ensures sync)
+        emit('game_state_update', {
+            'game_id': game_id,
+            'status': 'playing',
+            'turn': 1,
+            'board': game['board'],
+            'message': 'Game Started! Black to move.'
+        }, room=game_id)
+
+        # 6. Update the Open Games list for everyone else in the lobby
+        # (Remove this game from the list since it's now playing)
+        open_games = [
+            {"id": g["id"], "size": g["size"], "host_sid": g["players"][1]}
+            for g in online_manager.games.values()
+            if g["status"] == "waiting"
+        ]
+        socketio.emit('open_games_list', {"games": open_games})
+
+    else:
+        available = [g for g in online_manager.games.keys() if online_manager.games[g]['status'] == 'waiting']
+        print(f"❌ Game {game_id} not found or full.")
+        emit('join_failed', {
+            'message': f"Game '{game_id}' unavailable. Available: {available}"
+        }, room=sid)
 
 @socketio.on('make_online_move')
 def on_make_online_move(data):
@@ -845,5 +900,4 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
-
 
