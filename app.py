@@ -893,12 +893,6 @@ def on_make_online_move(data):
         emit('move_error', {'message': message}, room=sid)
 
 
-# ============================================================
-# MAIN RUNNER (MODIFIED TO RUN WITH SOCKETIO)
-# ============================================================
-if __name__ == "__main__":
-    print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port)
+
 
 
