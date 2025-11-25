@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -7,8 +10,6 @@ from collections import defaultdict
 import uuid
 
 
-import eventlet
-eventlet.monkey_patch()
 
 # --- Flask & SocketIO Setup ---
 app = Flask(__name__)
@@ -844,4 +845,5 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
