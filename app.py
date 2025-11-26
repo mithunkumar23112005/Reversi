@@ -12,7 +12,7 @@ app = Flask(__name__)
 # Allow CORS for development, especially for SocketIO
 CORS(app, resources={r"/*": {"origins": "*"}}) 
 app.config['SECRET_KEY'] = 'your_secret_key_here'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 # ============================================================
 # GAME MANAGER (For Online Games)
 # ============================================================
@@ -899,5 +899,6 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
 
