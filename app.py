@@ -91,38 +91,42 @@ class GameManager:
         engine = self.engines.get(game_id)
 
         if not game or not engine or game["turn"] != player:
-            return False, "Invalid turn or game."
-        
-        # 1. Validate move
+            return False, {"error": "Invalid turn or game."}
+    
+        # Validate move
         valid_moves = engine.get_valid_moves(game["board"], player)
         if not any(m["row"] == row and m["col"] == col for m in valid_moves):
-            return False, "Invalid move coordinates."
-        
-        # 2. Execute move
-        new_board = engine.make_move(game["board"], row, col, player)
+            return False, {"error": "Invalid move coordinates."}
+
+        # Execute move (NOW RETURNS flip list)
+        new_board, flipped = engine.make_move(game["board"], row, col, player)
         game["board"] = new_board
-        
-        # 3. Determine next player
+
+        move_info = {
+            "player": player,
+            "row": row,
+            "col": col,
+            "flipped": flipped  # 🔥 SEND THIS TO FRONTEND
+        }
+
         next_player = 3 - player
-        
-        # Check if next player has moves
         next_moves = engine.get_valid_moves(new_board, next_player)
-        
+
         if len(next_moves) > 0:
             game["turn"] = next_player
-            return True, None
-        
-        # Next player has no moves, check if current player has moves (skip turn)
+            return True, move_info
+
         current_moves = engine.get_valid_moves(new_board, player)
-        
+
         if len(current_moves) > 0:
-            # Skip opponent's turn, current player plays again
             game["turn"] = player
-            return True, "Opponent skipped turn."
-        else:
-            # Game over, no one can move
-            game["status"] = "finished"
-            return True, "Game Over"
+            move_info["message"] = "Opponent skipped turn."
+            return True, move_info
+
+        game["status"] = "finished"
+        move_info["message"] = "Game Over"
+        return True, move_info
+
 
     def _init_board(self, size):
         board = [[0]*size for _ in range(size)]
@@ -314,26 +318,30 @@ class ReversiEngine:
     # APPLY MOVE
     # --------------------------------------------------------
     def make_move(self, board, row, col, player):
-        newb = [r[:] for r in board]
-        newb[row][col] = int(player)
-        opp = 3 - player
+    newb = [r[:] for r in board]
+    newb[row][col] = int(player)
+    opp = 3 - player
 
-        for dr, dc in self.DIRECTIONS:
-            r, c = row + dr, col + dc
-            flips = []
+    flipped_positions = []  # 🔥 NEW
 
-            while 0 <= r < self.board_size and 0 <= c < self.board_size:
-                if newb[r][c] == 0:
-                    break
-                if newb[r][c] == player:
-                    for fr, fc in flips:
-                        newb[fr][fc] = int(player)
-                    break
-                flips.append((r, c))
-                r += dr
-                c += dc
+    for dr, dc in self.DIRECTIONS:
+        r, c = row + dr, col + dc
+        flips = []
 
-        return newb
+        while 0 <= r < self.board_size and 0 <= c < self.board_size:
+            if newb[r][c] == 0:
+                break
+            if newb[r][c] == player:
+                for fr, fc in flips:
+                    newb[fr][fc] = int(player)
+                    flipped_positions.append((fr, fc))  # 🔥 RECORD FLIPPED
+                break
+
+            flips.append((r, c))
+            r += dr
+            c += dc
+
+    return newb, flipped_positions  # 🔥 IMPORTANT
 
     # --------------------------------------------------------
     # EVALUATION FUNCTION
@@ -834,7 +842,7 @@ def on_make_online_move(data):
 
     game = online_manager.get_game(game_id)
     
-    # Identify player number (1 or 2)
+    # Identify player number
     player = 0
     if game["players"][1] == sid:
         player = 1
@@ -848,49 +856,55 @@ def on_make_online_move(data):
     row = data.get('row')
     col = data.get('col')
     
-    success, message = online_manager.make_move(game_id, row, col, player)
+    # 🔥 NOW RETURNS: success, {player,row,col,flipped, message?}
+    success, move_info = online_manager.make_move(game_id, row, col, player)
     
-    if success:
-        # Check for game end and determine winner/score
-        if game["status"] == "finished":
-            flat = [cell for row in game["board"] for cell in row]
-            scores = {
-                1: flat.count(1),
-                2: flat.count(2)
-            }
+    if not success:
+        emit('move_error', {'message': move_info.get("error", "Invalid move")}, room=sid)
+        return
 
+    # ---- GAME FINISHED ----
+    if game["status"] == "finished":
+        flat = [cell for row in game["board"] for cell in row]
+        scores = {
+            1: flat.count(1),
+            2: flat.count(2)
+        }
 
-            winner = 0
-            if scores[1] > scores[2]:
-                winner = 1
-            elif scores[2] > scores[1]:
-                winner = 2
-                
-            game_state = {
-                'game_id': game_id,
-                'board': game["board"],
-                'turn': game["turn"],
-                'status': game["status"],
-                'scores': scores,
-                'winner': winner,
-                'message': message or "Game Over"
-            }
-            socketio.emit('game_state_update', game_state, room=game_id)
-            online_manager.remove_game(game_id)
-            leave_room(game_id)
-            
-        else:
-            # Broadcast new state
-            game_state = {
-                'game_id': game_id,
-                'board': game["board"],
-                'turn': game["turn"],
-                'status': game["status"],
-                'message': message or f"Player {player} moved to ({row}, {col})."
-            }
-            socketio.emit('game_state_update', game_state, room=game_id)
-    else:
-        emit('move_error', {'message': message}, room=sid)
+        winner = 0
+        if scores[1] > scores[2]:
+            winner = 1
+        elif scores[2] > scores[1]:
+            winner = 2
+        
+        game_state = {
+            'game_id': game_id,
+            'board': game["board"],
+            'turn': game["turn"],
+            'status': "finished",
+            'scores': scores,
+            'winner': winner,
+            'move': move_info,  # 🔥 include move + flipped
+            'message': move_info.get("message", "Game Over")
+        }
+
+        socketio.emit('game_state_update', game_state, room=game_id)
+        online_manager.remove_game(game_id)
+        leave_room(game_id)
+        return
+
+    # ---- NORMAL MOVE ----
+    game_state = {
+        'game_id': game_id,
+        'board': game["board"],
+        'turn': game["turn"],
+        'status': game["status"],
+        'move': move_info,  # 🔥 include flipped coins
+        'message': f"Player {player} moved to ({row}, {col}). Flipped: {move_info['flipped']}"
+    }
+
+    socketio.emit('game_state_update', game_state, room=game_id)
+
 
 
 # ============================================================
@@ -900,6 +914,7 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
 
 
