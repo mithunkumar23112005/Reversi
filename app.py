@@ -1,5 +1,4 @@
 import eventlet
-eventlet.monkey_patch()
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -7,16 +6,13 @@ import numpy as np
 import time
 from collections import defaultdict
 import uuid
-
-
-
-
+from threading import Thread
 # --- Flask & SocketIO Setup ---
 app = Flask(__name__)
 # Allow CORS for development, especially for SocketIO
 CORS(app, resources={r"/*": {"origins": "*"}}) 
 app.config['SECRET_KEY'] = 'your_secret_key_here'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 # ============================================================
 # GAME MANAGER (For Online Games)
 # ============================================================
@@ -155,6 +151,9 @@ def deep_convert(obj):
     if isinstance(obj, list):
         return [deep_convert(x) for x in obj]
     return to_py_int(obj)
+
+def run_ai(board, player, depth, engine, result_container):
+    result_container["result"] = engine.search(board, player, depth)
 
 
 # ============================================================
@@ -601,19 +600,20 @@ def api_ai():
     difficulty = data.get("difficulty", "medium")
     session = data.get("session_id", "default")
 
-    depth_map = {
-        "easy": 4,
-        "medium": 6,
-        "hard": 8,
-        "expert": 10
-    }
+    depth_map = { "easy": 4, "medium": 6, "hard": 8, "expert": 10 }
     depth = depth_map.get(difficulty, 6)
 
     if session not in engines:
         engines[session] = ReversiEngine(len(board))
 
     engine = engines[session]
-    result = engine.search(board, player, depth)
+
+    result_container = {}
+    thread = Thread(target=run_ai, args=(board, player, depth, engine, result_container))
+    thread.start()
+    thread.join()  # Wait until search finishes (non-blocking for eventlet)
+
+    result = result_container["result"]
 
     if not result["move"]:
         return jsonify({"success": False, "message": "No moves available"})
@@ -627,6 +627,7 @@ def api_ai():
         "board": new_board,
         "stats": result["stats"]
     })
+
 
 
 # ------------------------------------------------------------
@@ -762,8 +763,6 @@ def on_get_open_games():
     print(f"   Games: {[g['id'] for g in open_games]}")
     emit('open_games_list', {"games": open_games}, room=request.sid)
 
-# In app.py
-
 @socketio.on('join_game')
 def on_join_game(data):
     sid = request.sid
@@ -893,6 +892,11 @@ def on_make_online_move(data):
         emit('move_error', {'message': message}, room=sid)
 
 
+# ============================================================
+# MAIN RUNNER (MODIFIED TO RUN WITH SOCKETIO)
+# ============================================================
+if __name__ == "__main__":
+    print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
-
+    socketio.run(app, host="0.0.0.0", port=5000)
 
