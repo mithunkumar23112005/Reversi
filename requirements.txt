@@ -1,11 +1,7 @@
-flask==3.0.2
-flask-cors==4.0.0
+flask
+flask-cors
+flask-socketio==5.3.6
 python-socketio==5.11.2
 python-engineio==4.9.1
-flask-socketio==5.3.6
-numpy==1.26.4
-
-gevent==23.9.1
-gevent-websocket==0.10.1
-
-gunicorn==21.2.0
+numpy
+gunicorn
