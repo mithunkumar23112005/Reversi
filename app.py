@@ -318,30 +318,30 @@ class ReversiEngine:
     # APPLY MOVE
     # --------------------------------------------------------
     def make_move(self, board, row, col, player):
-    newb = [r[:] for r in board]
-    newb[row][col] = int(player)
-    opp = 3 - player
+        newb = [r[:] for r in board]
+        newb[row][col] = int(player)
+        opp = 3 - player
 
-    flipped_positions = []  # 🔥 NEW
+        flipped_positions = []  # 🔥 NEW
 
-    for dr, dc in self.DIRECTIONS:
-        r, c = row + dr, col + dc
-        flips = []
+        for dr, dc in self.DIRECTIONS:
+            r, c = row + dr, col + dc
+            flips = []
 
-        while 0 <= r < self.board_size and 0 <= c < self.board_size:
-            if newb[r][c] == 0:
-                break
-            if newb[r][c] == player:
-                for fr, fc in flips:
-                    newb[fr][fc] = int(player)
-                    flipped_positions.append((fr, fc))  # 🔥 RECORD FLIPPED
-                break
+            while 0 <= r < self.board_size and 0 <= c < self.board_size:
+                if newb[r][c] == 0:
+                    break
+                if newb[r][c] == player:
+                    for fr, fc in flips:
+                        newb[fr][fc] = int(player)
+                        flipped_positions.append((fr, fc))  # 🔥 RECORD FLIPPED
+                    break
 
-            flips.append((r, c))
-            r += dr
-            c += dc
+                flips.append((r, c))
+                r += dr
+                c += dc
 
-    return newb, flipped_positions  # 🔥 IMPORTANT
+        return newb, flipped_positions  # 🔥 IMPORTANT
 
     # --------------------------------------------------------
     # EVALUATION FUNCTION
@@ -921,6 +921,7 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
 
 
