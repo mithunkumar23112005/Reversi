@@ -439,7 +439,7 @@ class ReversiEngine:
             best_move = moves[0]
 
             for m in moves:
-                nb = self.make_move(board, m["row"], m["col"], current)
+                nb, _ = self.make_move(board, m["row"], m["col"], current)
                 val, _ = self.minimax(nb, depth-1, alpha, beta, False, player, root_depth)
                 if val > best:
                     best = val
@@ -458,7 +458,7 @@ class ReversiEngine:
             best_move = moves[0]
 
             for m in moves:
-                nb = self.make_move(board, m["row"], m["col"], current)
+                nb, _ = self.make_move(board, m["row"], m["col"], current)
                 val, _ = self.minimax(nb, depth-1, alpha, beta, True, player, root_depth)
                 if val < best:
                     best = val
@@ -676,7 +676,7 @@ def api_solver():
 
 
     for m in moves:
-        nb = engine.make_move(board, m["row"], m["col"], player)
+        nb, _ = engine.make_move(board, m["row"], m["col"], player)
         
         # Minimax on the resulting board state, assuming opponent plays optimally (False = minimizing)
         score, _ = engine.minimax(
@@ -922,6 +922,7 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
 
 
