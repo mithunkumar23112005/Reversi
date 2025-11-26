@@ -593,9 +593,9 @@ def api_make():
     if not any(m["row"] == row and m["col"] == col for m in valid_moves):
         return jsonify({"success": False, "message": "Invalid move"})
 
-    new_board = engine.make_move(board, row, col, player)
+    new_board, flipped = engine.make_move(board, row, col, player)
 
-    return jsonify({"success": True, "board": new_board})
+    return jsonify({"success": True, "board": new_board, "flipped": flipped})
 
 
 # ------------------------------------------------------------
@@ -620,7 +620,7 @@ def api_ai():
     result_container = {}
     thread = Thread(target=run_ai, args=(board, player, depth, engine, result_container))
     thread.start()
-    thread.join()  # Wait until search finishes (non-blocking for eventlet)
+    thread.join()
 
     result = result_container["result"]
 
@@ -628,13 +628,20 @@ def api_ai():
         return jsonify({"success": False, "message": "No moves available"})
 
     move = result["move"]
-    new_board = engine.make_move(board, move["row"], move["col"], player)
 
+    # 🔥 GET NEW BOARD + FLIPPED POSITIONS
+    new_board, flipped = engine.make_move(board, move["row"], move["col"], player)
+
+    # 🔥 RETURN FLIPPED LIST INSIDE THE MOVE OBJECT
     return jsonify({
         "success": True,
-        "move": move,
+        "move": {
+            "row": move["row"],
+            "col": move["col"],
+            "flipped": flipped
+        },
         "board": new_board,
-        "stats": result["stats"]
+        "stats": result["stats"],
     })
 
 
@@ -914,6 +921,7 @@ if __name__ == "__main__":
     print("⚡ Reversi AI Backend (REST + SocketIO) running at http://localhost:5000")
 
     socketio.run(app, host="0.0.0.0", port=5000)
+
 
 
 
